@@ -1,0 +1,76 @@
+server:
+  port: 8091
+  servlet:
+    # 应用的访问路径
+    context-path: /cpapi
+
+# 是否启用 MySQL（false 时不初始化数据源与 MyBatis）
+mysql:
+  enabled: true
+
+# 中奖结算 / 虚拟投注 / 即点真投 多路并行（按路数并行，默认开启）
+caipiao:
+  parallel:
+    enabled: true
+    threads: 10
+
+spring:
+  profiles:
+    active: test3-local
+  task:
+    scheduling:
+      thread-name-prefix: job-pool-
+      pool:
+        size: 10
+
+mybatis-plus:
+  # 搜索指定包别名
+  typeAliasesPackage: com.easycode.**.domain
+  # 配置mapper的扫描，找到所有的mapper.xml映射文件
+  mapperLocations: classpath*:/com/xytl/project/**/*Mapper.xml
+  # 加载全局的配置文件
+  configLocation: classpath:mybatis/mybatis-config.xml
+
+  global-config:
+    # 逻辑删除配置
+    db-config:
+      # 删除前
+      logic-not-delete-value: 2
+      # 删除后
+      logic-delete-value: 1
+
+# springdoc-openapi项目配置
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.xytl.project.caipiaoapi.controller
+# knife4j的增强配置，不需要增强可以不配
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+  basic:
+    enable: true
+    username: cpadmin
+    password: admin!!**
+
+---
+# mysql.enabled=false 时排除数据源与 MyBatis 自动配置
+spring:
+  config:
+    activate:
+      on-property:
+        name: mysql.enabled
+        having-value: "false"
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - com.alibaba.druid.spring.boot.autoconfigure.DruidDataSourceAutoConfigure
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration

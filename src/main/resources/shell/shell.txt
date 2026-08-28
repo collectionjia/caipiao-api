@@ -1,0 +1,53 @@
+caipiao.sh
+source_root=/opt/source/caipiao
+deploy_root=/root/cai3/
+
+
+cd ${source_root}/caipiao;
+git pull
+
+mvn clean install -Dmaven.test.skip
+if [ $? != 0 ]; then
+    echo "mvn install run error~~"
+    exit 9
+fi
+
+
+\cp -r /opt/source/caipiao/caipiao/target/caipiao-api-1.0.0.jar   /root/cai3/;
+bash /root/cai3/start.sh;
+
+
+start.sh
+jarfile=caipiao3/caipiao-api-1.0.0.jar
+deploy_root=/home/fanming/aime_cable_prod_uat
+PID=`ps -ef | grep ${jarfile}  | grep -v grep | awk '{print $2}'`
+echo PID:${PID}
+if [ -z "$PID" ]
+then
+    echo Application is already stopped
+else
+    echo kill $PID
+    kill -9 $PID
+fi
+\cp -r /opt/deploy/caipiao3/caipiao3.log  /opt/deploy/caipiao3/caipiao3_$(date +%Y%m%d_%H%M%S).log;
+nohup java -Dspring.profiles.active=test3 -jar -Duser.timezone=GMT+08 -Dserver.port=7012 /opt/deploy/caipiao3/caipiao-api-1.0.0.jar > /opt/deploy/caipiao3/caipiao3.log &
+
+
+nginx
+server {
+        listen 3358;
+
+        location / {
+          #root  /www/wwwroot/yingjixiaofang/;
+          root  /www/wwwroot/caipiao3/;
+        }
+
+
+        location /cpapi/ {
+        proxy_pass http://36.138.58.51:28079/;
+         proxy_read_timeout 50000;
+          proxy_set_header Host $http_host;
+          proxy_set_header  X-Real-IP  $remote_addr;
+	}
+
+}
