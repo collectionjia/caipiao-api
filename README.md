@@ -2,8 +2,6 @@
 
 彩票预测与自动投注后端服务，基于 Spring Boot 2.7，配合 Redis 缓存与外部彩票平台 API，实现**定时预测、虚拟投注、中奖结算、真钱下单**等完整流程。
 
-> 仓库地址：https://gitee.com/Collection_jia/caipiao-api
-
 ---
 
 ## 功能概览
