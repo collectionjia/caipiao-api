@@ -385,6 +385,17 @@ public class PiaoCoderService {
         }
     }
 
+    private static boolean isPositiveBetCount(String count) {
+        if (MyStringUtils.valueIsEmpty(count)) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(count.trim()) > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     private static int compareScoreKeys(String key1, String key2) {
         return Double.compare(Double.parseDouble(key1.trim()), Double.parseDouble(key2.trim()));
     }
@@ -536,6 +547,7 @@ public class PiaoCoderService {
                     redisKeys.add("touzhu"+playNo+"-"+oldnum);
                     redisKeys.add(key+"-payMoney");
                     redisKeys.add(key+"-notPayCount");
+                    redisKeys.add(key+"-payCount");
                     redisKeys.add("payNumDetail"+playNo+"-"+oldnum);
                 }
                 List<String> stateValues=redisKeys.isEmpty()
@@ -557,14 +569,15 @@ public class PiaoCoderService {
                                 if(!"true".equals(touzhuFlag)){
                                     return;
                                 }
-                                String luNotpaycount=stateValues.get(base+1);
-                                String lunotPayCount=stateValues.get(base+2);
-                                String payNumDetail=stateValues.get(base+3);
+                                String luPayMoney=stateValues.get(base+1);
+                                String luNotPayCount=stateValues.get(base+2);
+                                String luPayCount=stateValues.get(base+3);
+                                String payNumDetail=stateValues.get(base+4);
                                 String number_score=parseNumberScoreMap(mapvalue).get(oldnum);
                                 if(number_score==null){
                                     number_score=getValueByKey(mapvalue, oldnum);
                                 }
-                                processWinRoad(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score,
+                                processWinRoad(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score,
                                         plaggamewin,payNumDetail,winCtx,wincountnum);
                             } finally {
                                 winBatchContext.remove();
@@ -584,14 +597,15 @@ public class PiaoCoderService {
                         if(!"true".equals(touzhuFlag)){
                             continue;
                         }
-                        String luNotpaycount=stateValues.get(base+1);
-                        String lunotPayCount=stateValues.get(base+2);
-                        String payNumDetail=stateValues.get(base+3);
+                        String luPayMoney=stateValues.get(base+1);
+                        String luNotPayCount=stateValues.get(base+2);
+                        String luPayCount=stateValues.get(base+3);
+                        String payNumDetail=stateValues.get(base+4);
                         String number_score=parseNumberScoreMap(mapvalue).get(oldnum);
                         if(number_score==null){
                             number_score=getValueByKey(mapvalue, oldnum);
                         }
-                        processWinRoad(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score,
+                        processWinRoad(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score,
                                 plaggamewin,payNumDetail,winCtx,wincountnum);
                     }
                 }
@@ -603,11 +617,15 @@ public class PiaoCoderService {
         redisService.set("wincountnum"+beforno, wincountnum.get()+"");
     }
 
-    private void processWinRoad(String luNotpaycount,String beforno,String playNo,String lunotPayCount,
+    private void processWinRoad(String luPayMoney,String beforno,String playNo,String luNotPayCount,String luPayCount,
                                 String oldnum,String number_score,String plaggamewin,String payNumDetail,
                                 WinBatchContext winCtx,AtomicInteger wincountnum){
+        if (!isPositiveBetCount(luPayCount)) {
+            log.debug("[中奖结算] 期数:{} 路数:{} 号码:{} 投注次数为{}，跳过中奖记录", beforno, playNo, oldnum, luPayCount);
+            return;
+        }
         if(!"false".equals(plaggamewin)){
-            agentWinMoney(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score);
+            agentWinMoney(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score);
         }
         wincountnum.incrementAndGet();
         markNumberIsZhongInBatch(playNo,oldnum,payNumDetail);
@@ -1527,29 +1545,30 @@ public class PiaoCoderService {
      * @param payMoneystr
      * @param
      */
-    public   double  agentWinMoney(String payMoneystr,String planno,String playNo,String cishu,String oldnum,String number_score){
+    public   double  agentWinMoney(String payMoneystr,String planno,String playNo,String xianzhicishu,String cishu,String oldnum,String number_score){
         WinBatchContext batch = winBatchContext.get();
         if (batch != null) {
             synchronized (batch) {
-                return recordAgentWinMoney(batch, payMoneystr, planno, playNo, cishu, oldnum, number_score);
+                return recordAgentWinMoney(batch, payMoneystr, planno, playNo, xianzhicishu, cishu, oldnum, number_score);
             }
         }
-        return recordAgentWinMoneyImmediate(payMoneystr, planno, playNo, cishu, oldnum, number_score);
+        return recordAgentWinMoneyImmediate(payMoneystr, planno, playNo, xianzhicishu, cishu, oldnum, number_score);
     }
 
     private double recordAgentWinMoney(WinBatchContext batch, String payMoneystr, String planno, String playNo,
-                                       String cishu, String oldnum, String number_score) {
+                                       String xianzhicishu, String cishu, String oldnum, String number_score) {
         String initmoneyBefore = MyStringUtils.string3double(batch.initmoney + "");
         double initmoneyDouble = Double.parseDouble(payMoneystr) * 9.925;
         batch.initmoney += initmoneyDouble;
         log.debug("赢了 期数:{} 路数:{} 号码:{} 奖金:{}", planno, playNo, oldnum, initmoneyDouble);
-        String resultstr = MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, cishu,
+        String resultstr = MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, xianzhicishu, cishu,
                 initmoneyBefore, initmoneyDouble + "", batch.initmoney + "");
         batch.winLines.add(0, resultstr);
         batch.fileContent.append("\n赢了 期数:").append(planno)
                 .append(" 路数:").append(playNo)
                 .append(" 投注号码:").append(oldnum)
                 .append("  投注分数:").append(number_score)
+                .append("   限制次数:").append(xianzhicishu)
                 .append("   投注次数:").append(cishu)
                 .append(" 投注前金额:").append(initmoneyBefore)
                 .append(" 挣到金额:").append(initmoneyDouble)
@@ -1569,8 +1588,8 @@ public class PiaoCoderService {
         return batch.initmoney;
     }
 
-    private double recordAgentWinMoneyImmediate(String payMoneystr, String planno, String playNo, String cishu,
-                                                String oldnum, String number_score) {
+    private double recordAgentWinMoneyImmediate(String payMoneystr, String planno, String playNo, String xianzhicishu,
+                                                String cishu, String oldnum, String number_score) {
         log.info("进入赢的方法 agentWinMoney 期数:{} 路数:{} 号码:{}", planno, playNo, oldnum);
         String  initmoney=redisService.get("initmoney");//设置的数字
         if(MyStringUtils.valueIsEmpty(initmoney)){
@@ -1586,8 +1605,8 @@ public class PiaoCoderService {
             String formattedDate = dateFormat.format(currentDate);
 
             String filePath = mybean.getFilepath()+"winmoney"+formattedDate+".txt";
-            String content = "\n赢了 期数:"+planno+" 路数:"+playNo+" 投注号码:"+oldnum+"  投注分数:"+number_score+"   投注次数:"+cishu+" 投注前金额:"+initmoney+" 挣到金额:"+initmoney_double+" 余额:"+initmoneytotal;
-            String resultstr=MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, cishu,
+            String content = "\n赢了 期数:"+planno+" 路数:"+playNo+" 投注号码:"+oldnum+"  投注分数:"+number_score+"   限制次数:"+xianzhicishu+"   投注次数:"+cishu+" 投注前金额:"+initmoney+" 挣到金额:"+initmoney_double+" 余额:"+initmoneytotal;
+            String resultstr=MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, xianzhicishu, cishu,
                     initmoney, initmoney_double + "", initmoneytotal + "");
 
             Map<String, String> countMaphset = (Map<String, String>) redisService.hget("countMap");
