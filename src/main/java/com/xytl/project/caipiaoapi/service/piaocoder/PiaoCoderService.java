@@ -385,6 +385,17 @@ public class PiaoCoderService {
         }
     }
 
+    private static boolean isPositiveBetCount(String count) {
+        if (MyStringUtils.valueIsEmpty(count)) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(count.trim()) > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     private static int compareScoreKeys(String key1, String key2) {
         return Double.compare(Double.parseDouble(key1.trim()), Double.parseDouble(key2.trim()));
     }
@@ -536,6 +547,7 @@ public class PiaoCoderService {
                     redisKeys.add("touzhu"+playNo+"-"+oldnum);
                     redisKeys.add(key+"-payMoney");
                     redisKeys.add(key+"-notPayCount");
+                    redisKeys.add(key+"-payCount");
                     redisKeys.add("payNumDetail"+playNo+"-"+oldnum);
                 }
                 List<String> stateValues=redisKeys.isEmpty()
@@ -557,14 +569,15 @@ public class PiaoCoderService {
                                 if(!"true".equals(touzhuFlag)){
                                     return;
                                 }
-                                String luNotpaycount=stateValues.get(base+1);
-                                String lunotPayCount=stateValues.get(base+2);
-                                String payNumDetail=stateValues.get(base+3);
+                                String luPayMoney=stateValues.get(base+1);
+                                String luNotPayCount=stateValues.get(base+2);
+                                String luPayCount=stateValues.get(base+3);
+                                String payNumDetail=stateValues.get(base+4);
                                 String number_score=parseNumberScoreMap(mapvalue).get(oldnum);
                                 if(number_score==null){
                                     number_score=getValueByKey(mapvalue, oldnum);
                                 }
-                                processWinRoad(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score,
+                                processWinRoad(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score,
                                         plaggamewin,payNumDetail,winCtx,wincountnum);
                             } finally {
                                 winBatchContext.remove();
@@ -584,14 +597,15 @@ public class PiaoCoderService {
                         if(!"true".equals(touzhuFlag)){
                             continue;
                         }
-                        String luNotpaycount=stateValues.get(base+1);
-                        String lunotPayCount=stateValues.get(base+2);
-                        String payNumDetail=stateValues.get(base+3);
+                        String luPayMoney=stateValues.get(base+1);
+                        String luNotPayCount=stateValues.get(base+2);
+                        String luPayCount=stateValues.get(base+3);
+                        String payNumDetail=stateValues.get(base+4);
                         String number_score=parseNumberScoreMap(mapvalue).get(oldnum);
                         if(number_score==null){
                             number_score=getValueByKey(mapvalue, oldnum);
                         }
-                        processWinRoad(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score,
+                        processWinRoad(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score,
                                 plaggamewin,payNumDetail,winCtx,wincountnum);
                     }
                 }
@@ -603,11 +617,15 @@ public class PiaoCoderService {
         redisService.set("wincountnum"+beforno, wincountnum.get()+"");
     }
 
-    private void processWinRoad(String luNotpaycount,String beforno,String playNo,String lunotPayCount,
+    private void processWinRoad(String luPayMoney,String beforno,String playNo,String luNotPayCount,String luPayCount,
                                 String oldnum,String number_score,String plaggamewin,String payNumDetail,
                                 WinBatchContext winCtx,AtomicInteger wincountnum){
+        if (!isPositiveBetCount(luPayCount)) {
+            log.debug("[中奖结算] 期数:{} 路数:{} 号码:{} 投注次数为{}，跳过中奖记录", beforno, playNo, oldnum, luPayCount);
+            return;
+        }
         if(!"false".equals(plaggamewin)){
-            agentWinMoney(luNotpaycount,beforno,playNo,lunotPayCount,oldnum,number_score);
+            agentWinMoney(luPayMoney,beforno,playNo,luNotPayCount,luPayCount,oldnum,number_score);
         }
         wincountnum.incrementAndGet();
         markNumberIsZhongInBatch(playNo,oldnum,payNumDetail);
@@ -1245,7 +1263,7 @@ public class PiaoCoderService {
                 log.debug("startpay=false，跳过真实下单拼参，仅保留虚拟投注");
             }
             } finally {
-                endPayBatch(currentPlanNo);
+                endPayBatch(currentPlanNo,beforePlanNo);
             }
         }
     }
@@ -1527,29 +1545,30 @@ public class PiaoCoderService {
      * @param payMoneystr
      * @param
      */
-    public   double  agentWinMoney(String payMoneystr,String planno,String playNo,String cishu,String oldnum,String number_score){
+    public   double  agentWinMoney(String payMoneystr,String planno,String playNo,String xianzhicishu,String cishu,String oldnum,String number_score){
         WinBatchContext batch = winBatchContext.get();
         if (batch != null) {
             synchronized (batch) {
-                return recordAgentWinMoney(batch, payMoneystr, planno, playNo, cishu, oldnum, number_score);
+                return recordAgentWinMoney(batch, payMoneystr, planno, playNo, xianzhicishu, cishu, oldnum, number_score);
             }
         }
-        return recordAgentWinMoneyImmediate(payMoneystr, planno, playNo, cishu, oldnum, number_score);
+        return recordAgentWinMoneyImmediate(payMoneystr, planno, playNo, xianzhicishu, cishu, oldnum, number_score);
     }
 
     private double recordAgentWinMoney(WinBatchContext batch, String payMoneystr, String planno, String playNo,
-                                       String cishu, String oldnum, String number_score) {
+                                       String xianzhicishu, String cishu, String oldnum, String number_score) {
         String initmoneyBefore = MyStringUtils.string3double(batch.initmoney + "");
         double initmoneyDouble = Double.parseDouble(payMoneystr) * 9.925;
         batch.initmoney += initmoneyDouble;
         log.debug("赢了 期数:{} 路数:{} 号码:{} 奖金:{}", planno, playNo, oldnum, initmoneyDouble);
-        String resultstr = MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, cishu,
+        String resultstr = MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, xianzhicishu, cishu,
                 initmoneyBefore, initmoneyDouble + "", batch.initmoney + "");
         batch.winLines.add(0, resultstr);
         batch.fileContent.append("\n赢了 期数:").append(planno)
                 .append(" 路数:").append(playNo)
                 .append(" 投注号码:").append(oldnum)
                 .append("  投注分数:").append(number_score)
+                .append("   限制次数:").append(xianzhicishu)
                 .append("   投注次数:").append(cishu)
                 .append(" 投注前金额:").append(initmoneyBefore)
                 .append(" 挣到金额:").append(initmoneyDouble)
@@ -1569,8 +1588,8 @@ public class PiaoCoderService {
         return batch.initmoney;
     }
 
-    private double recordAgentWinMoneyImmediate(String payMoneystr, String planno, String playNo, String cishu,
-                                                String oldnum, String number_score) {
+    private double recordAgentWinMoneyImmediate(String payMoneystr, String planno, String playNo, String xianzhicishu,
+                                                String cishu, String oldnum, String number_score) {
         log.info("进入赢的方法 agentWinMoney 期数:{} 路数:{} 号码:{}", planno, playNo, oldnum);
         String  initmoney=redisService.get("initmoney");//设置的数字
         if(MyStringUtils.valueIsEmpty(initmoney)){
@@ -1586,8 +1605,8 @@ public class PiaoCoderService {
             String formattedDate = dateFormat.format(currentDate);
 
             String filePath = mybean.getFilepath()+"winmoney"+formattedDate+".txt";
-            String content = "\n赢了 期数:"+planno+" 路数:"+playNo+" 投注号码:"+oldnum+"  投注分数:"+number_score+"   投注次数:"+cishu+" 投注前金额:"+initmoney+" 挣到金额:"+initmoney_double+" 余额:"+initmoneytotal;
-            String resultstr=MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, cishu,
+            String content = "\n赢了 期数:"+planno+" 路数:"+playNo+" 投注号码:"+oldnum+"  投注分数:"+number_score+"   限制次数:"+xianzhicishu+"   投注次数:"+cishu+" 投注前金额:"+initmoney+" 挣到金额:"+initmoney_double+" 余额:"+initmoneytotal;
+            String resultstr=MyStringUtils.formatWinDisplayHtml(planno, playNo, oldnum, number_score, xianzhicishu, cishu,
                     initmoney, initmoney_double + "", initmoneytotal + "");
 
             Map<String, String> countMaphset = (Map<String, String>) redisService.hget("countMap");
@@ -1721,7 +1740,7 @@ public class PiaoCoderService {
         payBatchContext.set(ctx);
     }
 
-    private void endPayBatch(String currentPlanNo) {
+    private void endPayBatch(String currentPlanNo,String beforenum) {
         PayBatchContext ctx = payBatchContext.get();
         payBatchContext.remove();
         if (ctx == null || !ctx.dirty) {
@@ -1750,7 +1769,8 @@ public class PiaoCoderService {
         }
         String current_paycountnum = actualBetCount > 0 ? String.valueOf(actualBetCount)
                 : redisService.get("paycountnum" + currentPlanNo);
-        String newpayrecore="<font color='blue'>期数："+currentPlanNo+"    投入号个数："+current_paycountnum+"</font><br/>"+payRecord;
+        String before_wincountnum=redisService.get("wincountnum"+beforenum);
+        String newpayrecore="<font color='blue'>期数："+currentPlanNo+"    上期赢的个数："+before_wincountnum+"     投入号个数："+current_paycountnum+" </font><br/>"+payRecord;
         redisService.set("payRecord", newpayrecore);
 
         String chooseNum = payRecordBuilder.toString();
@@ -1894,9 +1914,7 @@ public class PiaoCoderService {
         CachedRealPayResult result = new CachedRealPayResult();
         String lockKey = REAL_PAY_LOCK_PREFIX + ticketId;
         if (!redisService.setIfAbsent(lockKey, "1", 30)) {
-            result.setSuccess(false);
-            result.setMessage("操作进行中，请勿重复点击");
-            return result;
+            return failCachedRealPay(result, "操作进行中，请勿重复点击");
         }
         try {
             return doBetNowRealFromCached(ticketId, result);
@@ -1908,64 +1926,48 @@ public class PiaoCoderService {
     private CachedRealPayResult doBetNowRealFromCached(int ticketId, CachedRealPayResult result) {
         String token = redisService.get("tokenlogin");
         if (MyStringUtils.valueIsEmpty(token)) {
-            result.setSuccess(false);
-            result.setMessage("未设置token");
-            return result;
+            return failCachedRealPay(result, "未设置token");
         }
         String tokenmsg = redisService.get("tokenmsg");
         if (MyStringUtils.valueIsNotEmpty(tokenmsg) || TOKEN_HAVE_ERROR) {
-            result.setSuccess(false);
-            result.setMessage("会话过期，请重新登录");
-            return result;
+            return failCachedRealPay(result, "会话过期，请重新登录");
         }
 
         Map<String, String> header = getHeader(token);
         TimeList.DataItem planItem = getPlanNow(ticketId, header);
         if (planItem == null) {
-            result.setSuccess(false);
-            result.setMessage("获取当期期号失败");
-            return result;
+            return failCachedRealPay(result, "获取当期期号失败");
         }
         String currentPlanNo = planItem.getPlanId();
         String beforePlanNo = planItem.getBeforePlanNo();
         result.setPlanNo(currentPlanNo);
 
         if ("true".equals(redisService.get(REAL_PAY_DONE_PREFIX + currentPlanNo))) {
-            result.setSuccess(false);
-            result.setMessage("本期已真钱投注，请勿重复");
-            return result;
+            return failCachedRealPay(result, "本期已真钱投注，请勿重复",
+                    "本期已真钱投注，请勿重复, planNo=" + currentPlanNo);
         }
 
         Map<String, String> planNumberMap = redisService.hget("planNumberMap");
         if (planNumberMap == null || planNumberMap.isEmpty()) {
-            result.setSuccess(false);
-            result.setMessage("无缓存出号，请先等待预测或刷新");
-            return result;
+            return failCachedRealPay(result, "无缓存出号，请先等待预测或刷新");
         }
 
         String cachedPlanNo = redisService.get("planNumberMapPlanNo");
         result.setCachedPlanNo(cachedPlanNo);
         if (MyStringUtils.valueIsNotEmpty(cachedPlanNo) && !cachedPlanNo.equals(currentPlanNo)) {
-            result.setSuccess(false);
-            result.setMessage("缓存期号与当期不一致，请刷新后重试");
-            return result;
+            return failCachedRealPay(result, "缓存期号与当期不一致，请刷新后重试",
+                    "缓存期号与当期不一致, cachedPlanNo=" + cachedPlanNo + ", currentPlanNo=" + currentPlanNo);
         }
 
         if (!hasAnyCachedBettableNumbers(planNumberMap)) {
-            result.setSuccess(false);
-            result.setMessage("无可投号码");
-            return result;
+            return failCachedRealPay(result, "无可投号码",
+                    "无可投号码, planNo=" + currentPlanNo);
         }
 
         List<CachedRealPayTask> tasks = buildCachedRealPayTasks(ticketId, beforePlanNo, currentPlanNo, planNumberMap);
-        List<CachedRealPayDetail> details;
-        if (parallelEnabled && tasks.size() > 1) {
-            details = runParallelBetNowReal(header, currentPlanNo, tasks);
-        } else {
-            details = new ArrayList<>();
-            for (CachedRealPayTask task : tasks) {
-                details.add(executeCachedRealPayTask(header, currentPlanNo, task));
-            }
+        List<CachedRealPayDetail> details = new ArrayList<>();
+        for (CachedRealPayTask task : tasks) {
+            details.add(executeCachedRealPayTask(header, currentPlanNo, task));
         }
         result.getDetails().addAll(details);
         int totalBets = 0;
@@ -1983,6 +1985,8 @@ public class PiaoCoderService {
             result.setMessage(failCount > 0 ? "真钱下单失败" : "无可投号码");
             result.setRealBetCount(0);
             result.setFailCount(failCount);
+            logCachedRealPayRoadFailures(details);
+            log.warn("[即点真投] planNo={} 失败: {}, 失败路数={}", currentPlanNo, result.getMessage(), failCount);
             fillBalanceAfterRealPay(header, result);
             return result;
         }
@@ -1991,15 +1995,36 @@ public class PiaoCoderService {
             redisService.set(REAL_PAY_DONE_PREFIX + currentPlanNo, "true");
             result.setSuccess(true);
             result.setMessage("真钱下单成功");
+            log.info("[即点真投] planNo={} 成功, 笔数={}", currentPlanNo, totalBets);
         } else {
             result.setSuccess(false);
             result.setMessage("部分路数下单失败，请查看明细");
+            logCachedRealPayRoadFailures(details);
+            log.warn("[即点真投] planNo={} 部分失败, 成功笔数={}, 失败路数={}", currentPlanNo, totalBets, failCount);
         }
         result.setRealBetCount(totalBets);
         result.setFailCount(failCount);
         fillBalanceAfterRealPay(header, result);
-        log.info("[即点真投] planNo={} 成功笔数={} 失败路数={}", currentPlanNo, totalBets, failCount);
         return result;
+    }
+
+    private CachedRealPayResult failCachedRealPay(CachedRealPayResult result, String userMessage) {
+        return failCachedRealPay(result, userMessage, userMessage);
+    }
+
+    private CachedRealPayResult failCachedRealPay(CachedRealPayResult result, String userMessage, String logDetail) {
+        result.setSuccess(false);
+        result.setMessage(userMessage);
+        log.warn("[即点真投] 失败: {}", logDetail);
+        return result;
+    }
+
+    private void logCachedRealPayRoadFailures(List<CachedRealPayDetail> details) {
+        for (CachedRealPayDetail detail : details) {
+            if (!detail.isSuccess()) {
+                log.warn("[即点真投] 路数:{} 失败, 响应: {}", detail.getPlayNo(), detail.getResponse());
+            }
+        }
     }
 
     private List<CachedRealPayTask> buildCachedRealPayTasks(int ticketId, String beforePlanNo, String currentPlanNo,
@@ -2037,37 +2062,15 @@ public class PiaoCoderService {
             String response = postRealCreateOrder(header, currentPlanNo, task.dparams);
             detail.setResponse(response);
             detail.setSuccess(isRealOrderResponseSuccess(response));
+            if (!detail.isSuccess()) {
+                log.warn("[即点真投] 路数:{} 下单被拒, 响应: {}", task.playNo, response);
+            }
         } catch (Exception e) {
             log.error("[即点真投] 路数:{} 下单异常: {}", task.playNo, e.getMessage());
             detail.setSuccess(false);
             detail.setResponse(e.getMessage());
         }
         return detail;
-    }
-
-    private List<CachedRealPayDetail> runParallelBetNowReal(Map<String, String> header, String currentPlanNo,
-                                                            List<CachedRealPayTask> tasks) {
-        List<Future<CachedRealPayDetail>> futures = new ArrayList<>();
-        for (CachedRealPayTask task : tasks) {
-            futures.add(parallelExecutor.submit(() -> executeCachedRealPayTask(header, currentPlanNo, task)));
-        }
-        List<CachedRealPayDetail> details = new ArrayList<>(tasks.size());
-        for (Future<CachedRealPayDetail> future : futures) {
-            try {
-                CachedRealPayDetail detail = future.get();
-                if (detail != null) {
-                    details.add(detail);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("即点真投并行任务被中断", e);
-            } catch (ExecutionException e) {
-                log.error("即点真投并行任务失败", e.getCause());
-                throw new RuntimeException(e.getCause());
-            }
-        }
-        log.debug("[并行投注] 即点真投 {} 路完成", tasks.size());
-        return details;
     }
 
     private void fillBalanceAfterRealPay(Map<String, String> header, CachedRealPayResult result) {
@@ -2208,19 +2211,10 @@ public class PiaoCoderService {
         if (tasks.isEmpty()) {
             return;
         }
-        if (!parallelEnabled || tasks.size() == 1) {
-            for (RoadTask task : tasks) {
-                createOrderjavaMuti(ticketId, beforePlanNo, currentPlanNo, header, task.playNo, task.numstr, task.playNo);
-            }
-            return;
-        }
-        List<Future<?>> futures = new ArrayList<>();
         for (RoadTask task : tasks) {
-            futures.add(parallelExecutor.submit(() ->
-                    createOrderjavaMuti(ticketId, beforePlanNo, currentPlanNo, header, task.playNo, task.numstr, task.playNo)));
+            createOrderjavaMuti(ticketId, beforePlanNo, currentPlanNo, header, task.playNo, task.numstr, task.playNo);
         }
-        awaitFutures(futures);
-        log.debug("[并行投注] 真实下单 {} 路完成", tasks.size());
+        log.debug("[串行投注] 真实下单 {} 路完成", tasks.size());
     }
 
     private void updatePayCountNum(String planNo, int paycountnum) {

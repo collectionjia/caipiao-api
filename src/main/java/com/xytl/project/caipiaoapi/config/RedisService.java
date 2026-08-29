@@ -119,9 +119,17 @@ public class RedisService {
     }
 
     public void hmset(String key, HashMap<String, String> parammap) {
+        if (key == null || parammap == null || parammap.isEmpty()) {
+            return;
+        }
         Jedis jedis = borrowJedis();
         try {
-            jedis.hmset(key, parammap);
+            for (Map.Entry<String, String> entry : parammap.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                jedis.hset(key, entry.getKey(), entry.getValue());
+            }
         } finally {
             returnJedis(jedis);
         }

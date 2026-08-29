@@ -311,12 +311,14 @@ public class MyStringUtils {
      * 与后台 log.error("赢了 ...") 一致的展示格式
      */
     public static String formatWinDisplayHtml(String planno, String playNo, String oldnum, String numberScore,
-                                              String cishu, String initmoneyBefore, String winMoney, String balance) {
+                                              String xianzhicishu, String cishu, String initmoneyBefore,
+                                              String winMoney, String balance) {
         return "赢了 "
                 + spanBlue("期数:" + emptyToBlank(planno)) + " "
                 + spanRed("路数:" + emptyToBlank(playNo)) + " "
                 + spanRed("投注号码:" + emptyToBlank(oldnum)) + " "
                 + spanBlue("投注分数:" + emptyToBlank(numberScore)) + " "
+                + spanRed("限制次数:" + emptyToBlank(xianzhicishu)) + " "
                 + spanRed("投注次数:" + emptyToBlank(cishu)) + " "
                 + spanBlue("投注前金额:" + formatMoney(initmoneyBefore)) + " "
                 + spanRed("挣到金额:" + formatMoney(winMoney)) + " "
