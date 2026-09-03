@@ -281,7 +281,7 @@ public class PlanType {
         countNotWinCountTotal=Integer.parseInt(countNotWinCountstr)+1;
         countZuStrTotal=Integer.parseInt(countZuStr)+1;
         if(countNotWinCountTotal>=1 && countNotWinCountTotal<=3){
-            paymoneyTotal=5;
+            paymoneyTotal=1;
         }else if(countNotWinCountTotal>=4 && countNotWinCountTotal<=6){
             paymoneyTotal=1;
         }else if(countNotWinCountTotal>=7 && countNotWinCountTotal<=9){
